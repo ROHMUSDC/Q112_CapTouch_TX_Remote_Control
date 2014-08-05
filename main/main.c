@@ -174,7 +174,11 @@ unsigned char	_reqNotHalt;
 static unsigned char	BU21072Address = 0x5C;		// address of BU21072 device
 
 static unsigned char	CNT = 0xFF;				// address of AFE Control
-static unsigned char	CNT_CAL= 0x07;			// enable sensor calibration
+static unsigned char	CNT_CAL= 0x03;			// enable sensor calibration
+static unsigned char	CNT_CON = 0x04;			// enable configuration
+static unsigned char	CLR_INTERRUPT= 0xF0;			// enable sensor calibration
+static unsigned char	CLR_CAL = 0xFD;			// enable configuration
+static unsigned char	KEY3 = 0;				// 
 
 static unsigned char	SIN0_DATA = 0x00;			// address of SIN0 (8 bits long)
 static unsigned char	SIN1_DATA = 0x01;			// address of SIN1 (8 bits long)
@@ -222,9 +226,24 @@ RX_Loop:
     //Test IRLED
     //IRLED ^=1;
     TX_LED ^= 1;
-    NOP1000();
-    NOP1000();
-    NOP1000();
+    NOPx(60000);
+    NOPx(60000);
+    NOPx(60000);
+
+
+	//----- Example I2C RX Command -----
+	_flgI2CFin = 0;										//reset I2C completed Flag
+	i2c_stop();									            //Make sure I2C is not currently running
+	i2c_startReceive(BU21072Address, &SIN5_DATA, 2, &KEY3, 2, (cbfI2c)_funcI2CFin);	//Begin I2C Recieve Command
+	while(_flgI2CFin != 1){									//Wait for I2C commands to finish transfer
+		NOP1000();
+		main_clrWDT();
+	}
+	//----- End Example I2C RX Command -----
+
+if (KEY3 > 0){
+    RX_LED = 1;
+}
 
     goto RX_Loop;
 
@@ -272,7 +291,7 @@ void NOP1000( void )
 {
     unsigned int ONCNT = 0;
 
-    while(ONCNT < 60000) {	// NOP for 1000 Cycles
+    while(ONCNT < 1000) {	// NOP for 1000 Cycles
         ONCNT++;
     }
     ONCNT = 0;			// Reset Counter
@@ -307,7 +326,7 @@ static void Initialization(void) {
     SetOSC();
 
 
-    // TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+//*****************************************************************************
     // TIMER SETUP
 Setup_Timer_8:
     // Reset TIMER DATA REGISTER...
@@ -326,11 +345,11 @@ Setup_Timer_8:
     //   CONTROL-1 Register:
     // RUN Mode...
     T8RUN = 0;	//0=STOP; 1=START...
-    // TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+//*****************************************************************************
 
 
 
-    // IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+//*****************************************************************************
     // INTERRUPT SETUP...
     irq_di();	// Disable Interrupts
     irq_init();	// Initialize Interrupts (All Off and NO Requests)
@@ -366,7 +385,7 @@ Setup_Timer_8:
     EUA0 = 1; // EUA0 is the enable flag for the UART0 interrupt (1=ENABLED)
 
     irq_ei(); // Enable Interrupts
-    // IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+//*****************************************************************************
 
     // WDT...
     WDTMOD = 0x03; 	// 0x03=overflow 8sec...
@@ -380,16 +399,41 @@ Setup_Timer_8:
     //P20D = 1;	/* write protect enable */
     (void)i2c_init(I2C_MOD_FST, (unsigned short)HSCLK_KHZ, I2C_SYN_OFF);
 
-    
-
+     
+//*****************************************************************************
     //----- AFE control I2C Init TX Command ----- //Command for inititializing calibration
-//    _flgI2CFin = 0;														//reset I2C completed flag
-//    i2c_stop();															//Make sure I2C is not currently running
-//    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CAL, 1, (cbfI2c)_funcI2CFin);						//Begin I2C Receive Command
-//    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
-//       main_clrWDT();
-//    }
+    _flgI2CFin = 0;														//reset I2C completed flag
+    i2c_stop();															//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CON, 1, (cbfI2c)_funcI2CFin);							//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//*****************************************************************************  
 
+NOPx(1000);  
+//*****************************************************************************
+    //----- AFE control I2C Init TX Command ----- //Command for inititializing calibration
+    _flgI2CFin = 0;														//reset I2C completed flag
+    i2c_stop();															//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CAL, 1, (cbfI2c)_funcI2CFin);							//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//*****************************************************************************   
+
+NOPx(1000);
+//*****************************************************************************
+    //----- AFE control I2C Init TX Command ----- //Command for inititializing calibration
+    _flgI2CFin = 0;														//reset I2C completed flag
+    i2c_stop();															//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_INTERRUPT, 1, &CLR_CAL, 1, (cbfI2c)_funcI2CFin);							//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//*****************************************************************************
+
+NOPx(1000);
+//*****************************************************************************
     //----- LED drivers control I2C Init TX Command ----- //Command for setting up LED driver
 //    _flgI2CFin = 0;														//reset I2C completed flag
 //    i2c_stop();															//Make sure I2C is not currently running
@@ -397,6 +441,8 @@ Setup_Timer_8:
 //    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
 //        main_clrWDT();
 //    }
+//*****************************************************************************
+
 
     IRLED_PWM();  //set IRLED PWM
 
@@ -849,3 +895,20 @@ void IRLED_PWM(void) {
     PFRUN = 1;			// Turn ON
 
 }
+
+
+//===========================================================================
+void NOPx( unsigned int MyCount )
+{
+unsigned int ONCNT = 0;
+unsigned int xxx;
+
+xxx = MyCount;
+
+	while(ONCNT < xxx) {	// NOP for "xxx" Cycles
+		ONCNT++;
+	}
+	ONCNT = 0;			// Reset Counter 
+}
+
+
