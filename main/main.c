@@ -1,6 +1,6 @@
 //*****************************************************************************
 // Program:	 LAPIS Development Board Demo Code Q112: Cap. Touch
-// Authosr:	 USDC Team: C. Schell, K. Bahar, F. Lee, E. Patterson, J. Fontus
+// Authors:	 USDC Team: C. Schell, K. Bahar, F. Lee, E. Patterson, J. Fontus
 //		 ROHM Semiconductor USA, LLC
 //		 US Design Center
 // Started:  	 July 20, 2014
@@ -77,7 +77,7 @@
 //#include	<float.h>		// Numerical limits for floating-point numbers
 //#include	<limits.h>		// Numerical limits for integers
 //#include 	<clock.h>		// Set System Clock API
-//#include	<muldivu8.h>	// Multiplication and Division accelerator
+//#include	<muldivu8.h>		// Multiplication and Division accelerator
 //#include	<setjmp.h>		// Global jump (longjmp)
 //#include	<signal.h>		// Signal handling functions
 //#include	<stdarg.h>		// Variable numbers of arguments
@@ -90,7 +90,7 @@
 // I/O PIN DATA ALIASES...
 // Connections for Q112 Universal Socket
 #define RX 		PB0D
-#define TX 		PB1D
+#define INT 		PB1D	//INT
 #define I2C_SDA 	PB6D
 #define I2C_SCL 	PB5D
 #define GPIO_04	PB2D
@@ -106,6 +106,8 @@
 #define SPI_SCL 	PB5D
 #define SPI_CS0	PD4D
 #define SPI_CS1 	PD5D
+//*****************************************************************************
+
 
 //*****************************************************************************
 //===========================================================================
@@ -167,44 +169,66 @@ void _intI2c( void );
 void NOP1000( void );
 //*****************************************************************************
 
-//GLOBALS...
+
+//*****************************************************************************
+//===========================================================================
+//   GLOBALS:
+//===========================================================================
 unsigned char 	_flgI2CFin;
 unsigned char	_reqNotHalt;
 
-static unsigned char	BU21072Address = 0x5C;		// address of BU21072 device
-
+static unsigned char	BU21072Address = 0x5C;		// address of BU21072 capacitive touch IC
 static unsigned char	CNT = 0xFF;				// address of AFE Control
-static unsigned char	CNT_CAL= 0x03;			// enable sensor calibration
-static unsigned char	CNT_CON = 0x04;			// enable configuration
-static unsigned char	CLR_INTERRUPT= 0xF0;			// enable sensor calibration
-static unsigned char	CLR_CAL = 0xFD;			// enable configuration
-static unsigned char	KEY3 = 0;				// 
-
+static unsigned char	INTERRUPT = 0x10;			// address of Interrupt factor
+static unsigned char	CFG_SIN10 = 0xC0;			// address for selecting a setting for gain and threshold for off -> on for sin 1 and 0
+static unsigned char	CFG_SIN32 = 0xC1;			// address for selecting a setting for gain and threshold for off -> on for sin 3 and 2
+static unsigned char	CFG_SIN54 = 0xC2;			// address for selecting a setting for gain and threshold for off -> on for sin 5 and 4
+static unsigned char	CFG_SIN76 = 0xC3;			// address for selecting a setting for gain and threshold for off -> on for sin 7 and 6
+static unsigned char	CFG_SIN98 = 0xC4;			// address for selecting a setting for gain and threshold for off -> on for sin 9 and 8
+static unsigned char	GA10 = 0xC8;				// address for value of gain 1 (Bits 7-4 ) and gain 0 (Bits 3-0)
+static unsigned char	GA2 = 0xC9;				// address for value of gain 2 (Bits 3-0)
+static unsigned char	ON0 = 0xCA;				// address for value of the threshold for off -> on 
+static unsigned char	ON1 = 0xCB;				// address for value of the threshold for off -> on
+static unsigned char	ON2 = 0xCC;				// address for value of the threshold for off -> on
+static unsigned char	OFF = 0xCD;				// address for value of the threshold for on -> off  //when setting value make sure value is 0x00 < OFF < ON < 0xFF
+static unsigned char	OSTIMES = 0xCE;			// address for configuration oversamping (ONLY bit 7-4)
+static unsigned char	CONTTIMES = 0xCF;			// address for configuration continuous touch....Bit 7 is CONTSEL, Bits 5-0 is CONT[5:0]     //0.1[sec] x CONT
 static unsigned char	SIN0_DATA = 0x00;			// address of SIN0 (8 bits long)
 static unsigned char	SIN1_DATA = 0x01;			// address of SIN1 (8 bits long)
 static unsigned char	SIN2_DATA = 0x02;			// address of SIN2 (8 bits long)
 static unsigned char	SIN3_DATA = 0x03;			// address of SIN3 (8 bits long)
 static unsigned char	SIN4_DATA = 0x04;			// address of SIN4 (8 bits long)
-static unsigned char	SIN5_DATA = 0x05;			// address of SIN5 (8 bits long) //KEY3
-static unsigned char	SIN6_DATA = 0x06;			// address of SIN6 (8 bits long)
+static unsigned char	SIN5_DATA = 0x05;			// address of SIN5 (8 bits long) //KEY3 
+static unsigned char	SIN6_DATA = 0x06;			// address of SIN6 (8 bits long) 
 static unsigned char	SIN7_DATA = 0x07;			// address of SIN7 (8 bits long)
 static unsigned char	SIN8_DATA = 0x08;			// address of SIN8 (8 bits long)
 static unsigned char	SIN9_DATA = 0x09;			// address of SIN9 (8 bits long)
-
 static unsigned char	LEDDrive_LED_CH = 0xFA;		// address of LED_CH register
+
+static unsigned char       GA0_value = 0x7;			// value of GA0
+static unsigned char       ON0_value = 0x7F;			// value of ON0
+static unsigned char       OFF_value = 0x7E;			// value of OFF
+static unsigned char       CONT_value = 0x1F;			// value of CONT
 static unsigned char	LEDDrive_LED_CH_Contents = 0x00;	// assign LED_CH value. 00=all off , FF=all on, 01=pin0 on, 02=pin1 on, 03=pin0&1 on....
+static unsigned char	CNT_CAL= 0x03;			// enable sensor calibration and scan
+static unsigned char	CNT_CFG = 0x04;			// enable configuration
+static unsigned char	CLR_INTERRUPT= 0xF0;		// enable sensor calibration
+static unsigned char	CLR_CAL = 0;				// clear calibration
+static unsigned char	CLR_INI = 0;				// clear initialization
+static unsigned char	KEY3[1];				// place holder for ADC data
+static unsigned char	INTERRUPT_INI[1];			// reg is set to 1 when initialization is finished
+static unsigned char	INTERRUPT_CAL[1];			// reg is set to 1 when software calibration is finished
+static unsigned char 	CHECK[1];
+//*****************************************************************************
 
 
-/*############################################################################*/
-/*#                                  APIs                                    #*/
-/*############################################################################*/
 //*****************************************************************************
 //===========================================================================
 //  	Start of MAIN FUNCTION
 //===========================================================================
 int main(void)
 {
-//Local Variables
+    //Local Variables
     char char_a;		// -128 to 127
     unsigned char uchar;	// 0-255
     int inta, table [100];	// -32,768 to 32767
@@ -213,45 +237,39 @@ int main(void)
     float float_a;		// 1.17549435e-38 to 3.40282347e+38
     double double_a;	// 2.2250738585072014e-308 to 1.7976931348623157e+308
 
-Init:
     Initialization(); //Ports, UART, Timers, Oscillator, Comparators, etc.
 
-RX_Loop:
+    RX_Loop:
     main_clrWDT();
 
-    //PFRUN = 0;
-    //NOP1000();
-    //PFRUN = 1;
+    if(INT = 1){		// Testing interrupt signal
+        RX_LED = 1;
+        NOPx(60000);
+        NOPx(60000);
+        RX_LED = 0;
+    }
 
-    //Test IRLED
-    //IRLED ^=1;
-    TX_LED ^= 1;
-    NOPx(60000);
-    NOPx(60000);
-    NOPx(60000);
+    //----- START I2C RX Command ----- Grab SIN5 ADC data and place in KEY3 variable
+    _flgI2CFin = 0;										//reset I2C completed Flag
+    i2c_stop();									           		 //Make sure I2C is not currently running
+    i2c_startReceive(BU21072Address, &SIN5_DATA, 1, &KEY3, 1, (cbfI2c)_funcI2CFin);		 //Wait for I2C commands to finish transfer
+    while(_flgI2CFin != 1){
+        NOP1000();
+        main_clrWDT();
+    }
+    //----- END I2C RX Command -----
 
-
-	//----- Example I2C RX Command -----
-	_flgI2CFin = 0;										//reset I2C completed Flag
-	i2c_stop();									            //Make sure I2C is not currently running
-	i2c_startReceive(BU21072Address, &SIN5_DATA, 2, &KEY3, 2, (cbfI2c)_funcI2CFin);	//Begin I2C Recieve Command
-	while(_flgI2CFin != 1){									//Wait for I2C commands to finish transfer
-		NOP1000();
-		main_clrWDT();
-	}
-	//----- End Example I2C RX Command -----
-
-if (KEY3 > 0){
-    RX_LED = 1;
-}
+    TX_LED = 1;
+    if (KEY3[0] > 0){
+        TX_LED = 1;
+        NOPx(60000);
+        NOPx(60000);
+        NOPx(60000);
+        TX_LED = 0;
+     }
 
     goto RX_Loop;
-
 }//end main
-
-//===========================================================================
-//  	End of MAIN FUNCTION
-//===========================================================================
 //*****************************************************************************
 
 
@@ -261,15 +279,13 @@ if (KEY3 > 0){
 //===========================================================================
 //*****************************************************************************
 
-
-/*******************************************************************************
-	Routine Name:	main_clrWDT
-	Form:			void main_clrWDT( void )
-	Parameters:		void
-	Return value:	void
-	Description:	clear WDT.
-******************************************************************************/
-
+//*****************************************************************************
+//	Routine Name:	main_clrWDT
+//	Form:		void main_clrWDT( void )
+//	Parameters:	void
+//	Return value:	void
+//	Description:	clear WDT.
+//*****************************************************************************
 void main_clrWDT( void )
 {
     //How to clear the Watch Dog Timer:
@@ -280,13 +296,14 @@ void main_clrWDT( void )
     WDTCON = 0xA5u;
 }
 
-/*******************************************************************************
-	Routine Name:	NOP1000
-	Form:			void NOP( void )
-	Parameters:		void
-	Return value:	void
-	Description:	NOP for 1000 Cycles.
-******************************************************************************/
+
+//*****************************************************************************
+//	Routine Name:	NOP1000
+//	Form:		void NOP( void )
+//	Parameters:	void
+//	Return value:	void
+//	Description:	NOP for 1000 Cycles.
+//*****************************************************************************
 void NOP1000( void )
 {
     unsigned int ONCNT = 0;
@@ -298,12 +315,10 @@ void NOP1000( void )
 }
 
 
-
 //===========================================================================
 //	Initialize Micro to Desired State...
 //===========================================================================
 static void Initialization(void) {
-
     //Initialize Peripherals
     //BLKCON2 Control Bits...Manually Set 4/12/2013
     DSIO0 = 1; // 0=> Enables Synchronous Serial Port 0 (initial value).
@@ -324,11 +339,9 @@ static void Initialization(void) {
 
     // Set Oscillator Rate
     SetOSC();
-
-
 //*****************************************************************************
     // TIMER SETUP
-Setup_Timer_8:
+    Setup_Timer_8:
     // Reset TIMER DATA REGISTER...
     TM8D    = 0;	//Timer 8 DATA Register
     // Reset TIMER CLOCK REGISTER...
@@ -377,7 +390,6 @@ Setup_Timer_8:
     IRQ0 = IRQ1 = IRQ2 = IRQ3 = IRQ4 = IRQ5 = IRQ6 = IRQ7 = 0;
     E2H = 0; 	// E2H is the Enable flag for 2Hz TBC Interrupt (1=ENABLED)
 
-
     (void)irq_setHdr( (unsigned char)IRQ_NO_I2CMINT, _intI2c );
 
     EI2CM = 1;
@@ -387,52 +399,77 @@ Setup_Timer_8:
     irq_ei(); // Enable Interrupts
 //*****************************************************************************
 
+
+//*****************************************************************************
     // WDT...
     WDTMOD = 0x03; 	// 0x03=overflow 8sec...
     main_clrWDT(); 	// Clear WDT
 
-
-    
     //I2C Initialization...
     //P20C0 = 1;	/* CMOS output */
     //P20C1 = 1;
     //P20D = 1;	/* write protect enable */
     (void)i2c_init(I2C_MOD_FST, (unsigned short)HSCLK_KHZ, I2C_SYN_OFF);
-
-     
 //*****************************************************************************
-    //----- AFE control I2C Init TX Command ----- //Command for inititializing calibration
-    _flgI2CFin = 0;														//reset I2C completed flag
-    i2c_stop();															//Make sure I2C is not currently running
-    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CON, 1, (cbfI2c)_funcI2CFin);							//Begin I2C Receive Command
-    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
+
+  
+//*****************************************************************************
+//----- Setting of Sensor Configuration------Set value of Gain 0
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &GA10, 1, &GA0_value, 1, (cbfI2c)_funcI2CFin);			//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Setting of Sensor Configuration------Set value of threshold 0 off -> on
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &ON0, 1, &ON0_value, 1, (cbfI2c)_funcI2CFin);			//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Setting of Sensor Configuration------Set value of threshold 0 on -> off
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &OFF, 1, &OFF_value, 1, (cbfI2c)_funcI2CFin);			//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Setting of Sensor Configuration------Set value of continuos touch
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CONTTIMES, 1, &CONT_value, 1, (cbfI2c)_funcI2CFin);	//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
        main_clrWDT();
     }
 //*****************************************************************************  
 
-NOPx(1000);  
+
 //*****************************************************************************
-    //----- AFE control I2C Init TX Command ----- //Command for inititializing calibration
-    _flgI2CFin = 0;														//reset I2C completed flag
-    i2c_stop();															//Make sure I2C is not currently running
-    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CAL, 1, (cbfI2c)_funcI2CFin);							//Begin I2C Receive Command
-    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
+//----- Activate Sensor Configuration------
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CFG , 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
        main_clrWDT();
     }
-//*****************************************************************************   
+//*****************************************************************************  
 
-NOPx(1000);
+
 //*****************************************************************************
-    //----- AFE control I2C Init TX Command ----- //Command for inititializing calibration
-    _flgI2CFin = 0;														//reset I2C completed flag
-    i2c_stop();															//Make sure I2C is not currently running
-    i2c_startSend( BU21072Address, &CLR_INTERRUPT, 1, &CLR_CAL, 1, (cbfI2c)_funcI2CFin);							//Begin I2C Receive Command
-    while(_flgI2CFin != 1) {													//Wait for I2C commands to finish transfer
+//----- Activate Sensor Calibration------
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CNT, 1, &CNT_CAL, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
        main_clrWDT();
     }
-//*****************************************************************************
+//*****************************************************************************  
+    
 
-NOPx(1000);
+    NOPx(1000);
+
+
 //*****************************************************************************
     //----- LED drivers control I2C Init TX Command ----- //Command for setting up LED driver
 //    _flgI2CFin = 0;														//reset I2C completed flag
@@ -446,17 +483,18 @@ NOPx(1000);
 
     IRLED_PWM();  //set IRLED PWM
 
+
 }//End Initialization
 //===========================================================================
 
-/*******************************************************************************
-	Routine Name:	_funcI2CFin
-	Form:			static void _funcUartFin( unsigned int size, unsigned char errStat )
-	Parameters:		unsigned int size		 :
-				unsigned char errStat	 :
-	Return value:	void
-	Description:	UART transmission completion callback function.
-******************************************************************************/
+//*****************************************************************************
+//	Routine Name:	_funcI2CFin
+//	Form:		static void _funcUartFin( unsigned int size, unsigned char errStat )
+//	Parameters:	unsigned int size		 :
+//			unsigned char errStat	 :
+//	Return value:	void
+//	Description:	UART transmission completion callback function.
+//*****************************************************************************
 static void _funcI2CFin( unsigned int size, unsigned char errStat )
 {
     i2c_continue();					// Function in UART.c: process to continue send and receive...
@@ -465,13 +503,13 @@ static void _funcI2CFin( unsigned int size, unsigned char errStat )
 }
 
 
-/*******************************************************************************
-	Routine Name:	_intI2c
-	Form:			static void _intI2c( void )
-	Parameters:		void
-	Return value:	void
-	Description:	I2C handler.
-******************************************************************************/
+//*****************************************************************************
+//	Routine Name:	_intI2c
+//	Form:		static void _intI2c( void )
+//	Parameters:	void
+//	Return value:	void
+//	Description:	I2C handler.
+//*****************************************************************************
 static void _intI2c( void )
 {
     (void)i2c_continue();
@@ -479,13 +517,13 @@ static void _intI2c( void )
 }
 
 
-/*******************************************************************************
-	Routine Name:	checkI2C
-	Form:			void checkI2C( void )
-	Parameters:		void
-	Return value:	void
-	Description:	Reading or writing processing of I2C Bus.
-******************************************************************************/
+//*****************************************************************************
+//	Routine Name:	checkI2C
+//	Form:		void checkI2C( void )
+//	Parameters:	void
+//	Return value:	void
+//	Description:	Reading or writing processing of I2C Bus.
+//*****************************************************************************
 void checkI2C( void )
 {
     int		ret;
@@ -500,13 +538,13 @@ void checkI2C( void )
     }
 }
 
-/*******************************************************************************
-	Routine Name:	main_reqNotHalt
-	Form:			void reqNotHalt( void )
-	Parameters:		void
-	Return value:	void
-	Description:	request not halt.
-******************************************************************************/
+//*****************************************************************************
+//	Routine Name:	main_reqNotHalt
+//	Form:		void reqNotHalt( void )
+//	Parameters:	void
+//	Return value:	void
+//	Description:	request not halt.
+//*****************************************************************************
 void main_reqNotHalt( void )
 {
     _reqNotHalt = (unsigned char)FLG_SET;
@@ -540,24 +578,16 @@ static void SetOSC(void) {
 //===========================================================================
 void analog_comparator(void) {
 
-//Carl's Notes...
-
-//Step 1: Select the Interrupt Mode
-// 	a.) Interrupt Disabled      => CMPxE1 = 0; CMPxE0 = 0;
-// 	b.) Falling-Edge Int. Mode  => CMPxE1 = 0; CMPxE0 = 1;
-// 	c.) Rising-Edge Int. Mode   => CMPxE1 = 1; CMPxE0 = 0;
-// 	d.) Both-Edge Int. Mode     => CMPxE1 = 1; CMPxE0 = 1;
-
-
-//Step 2: Enable the Comparator                       => CMPxEN = 1;
-
-//Step 3: Wait 3ms to allow Comparator to stabilize
-
-//Step 4: Read the comparison result			=> CMPxD: 0= +<-; 1= +>-
-
-//Step 5: Disable the Comparator				=> CMPxEN = 0;
-
-
+    //Carl's Notes...
+    //Step 1: Select the Interrupt Mode
+    // 	a.) Interrupt Disabled          => CMPxE1 = 0; CMPxE0 = 0;
+    // 	b.) Falling-Edge Int. Mode   => CMPxE1 = 0; CMPxE0 = 1;
+    // 	c.) Rising-Edge Int. Mode   => CMPxE1 = 1; CMPxE0 = 0;
+    // 	d.) Both-Edge Int. Mode     => CMPxE1 = 1; CMPxE0 = 1;
+    //Step 2: Enable the Comparator             => CMPxEN = 1;
+    //Step 3: Wait 3ms to allow Comparator to stabilize
+    //Step 4: Read the comparison result	=> CMPxD: 0= +<-; 1= +>-
+    //Step 5: Disable the Comparator		=> CMPxEN = 0;
 
     //Comparator 0...
     CMP0EN  = 0x01; 	// Comparator ON...
@@ -568,8 +598,6 @@ void analog_comparator(void) {
 
     //Comparator 0 OFF
     CMP0EN  = 0x00;
-
-
 }
 //===========================================================================
 
@@ -579,12 +607,11 @@ void analog_comparator(void) {
 //===========================================================================
 void PortA_Low(void) {
 
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Set Pin Data...
+    //Carl's Notes...
+    //Step 1: Set Pin Direction...
+    //Step 2: Set Pin I/O Type...
+    //Step 3: Set Pin Purpose...
+    //Step 4: Set Pin Data...
 
     //Direction...
     PA0DIR = 0;		// PortA Bit0 set to Output Mode...
@@ -613,7 +640,6 @@ void PortA_Low(void) {
     PA2D = 0;		// A.2 Output OFF....
 
     main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -623,12 +649,11 @@ void PortA_Low(void) {
 //===========================================================================
 void PortB_Low(void) {
 
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Set Pin Data...
+    //Carl's Notes...
+    //Step 1: Set Pin Direction...
+    //Step 2: Set Pin I/O Type...
+    //Step 3: Set Pin Purpose...
+    //Step 4: Set Pin Data...
 
     //Direction...
     PB0DIR = 0;		// PortB Bit0 set to Output Mode...
@@ -687,7 +712,6 @@ void PortB_Low(void) {
     PB7D = 0;		// B.7 Output OFF....
 
     main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -697,12 +721,11 @@ void PortB_Low(void) {
 //===========================================================================
 void PortC_Low(void) {
 
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Set Pin Data...
+    //Carl's Notes...
+    //Step 1: Set Pin Direction...
+    //Step 2: Set Pin I/O Type...
+    //Step 3: Set Pin Purpose...
+    //Step 4: Set Pin Data...
 
     //Direction...
     PC0DIR = 0;		// PortC Bit0 set to Output Mode...
@@ -761,7 +784,6 @@ void PortC_Low(void) {
     PC7D = 0;		// C.7 Output OFF....
 
     main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -771,11 +793,10 @@ void PortC_Low(void) {
 //===========================================================================
 void PortD_Low(void) {
 
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Data...
+    //Carl's Notes...
+    //Step 1: Set Pin Direction...
+    //Step 2: Set Pin I/O Type...
+    //Step 3: Set Pin Data...
 
     //Direction...
     PD0DIR = 0;		// PortD Bit0 set to Output Mode...
@@ -807,9 +828,7 @@ void PortD_Low(void) {
     PD4D = 0;		// D.4 Output OFF....
     PD5D = 0;		// D.5 Output OFF....
 
-
     main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -819,12 +838,11 @@ void PortD_Low(void) {
 //===========================================================================
 void PortA_Digital_Inputs(void) {
 
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Set Pin Data...
+    //Carl's Notes...
+    //Step 1: Set Pin Direction...
+    //Step 2: Set Pin I/O Type...
+    //Step 3: Set Pin Purpose...
+    //Step 4: Set Pin Data...
 
     //Direction...
     PA0DIR = 1;		// PortA Bit0 set to Input Mode...
@@ -848,7 +866,6 @@ void PortA_Digital_Inputs(void) {
     PA2MD0  = 0;
 
     main_clrWDT(); 	// Clear WDT
-
 }
 //===========================================================================
 
@@ -858,14 +875,13 @@ void PortA_Digital_Inputs(void) {
 //===========================================================================
 void IRLED_PWM(void) {
 
-//Carl's Notes...
-
-//Step 1: Set Pin Direction...
-//Step 2: Set Pin I/O Type...
-//Step 3: Set Pin Purpose...
-//Step 4: Select the Clock Mode...
-//Step 5: Set the Duty Cycle...
-//Step 5: Start the PWM Counter...
+    //Carl's Notes...
+    //Step 1: Set Pin Direction...
+    //Step 2: Set Pin I/O Type...
+    //Step 3: Set Pin Purpose...
+    //Step 4: Select the Clock Mode...
+    //Step 5: Set the Duty Cycle...
+    //Step 5: Start the PWM Counter...
 
     //Turn ON PWMF1 output 
     PF1EN = 1;		//The PF2EN, PF1EN, and PF0EN are output enable bits of PWMF0 to 2
@@ -893,22 +909,22 @@ void IRLED_PWM(void) {
 
     //SET PWM COUNT ON
     PFRUN = 1;			// Turn ON
-
 }
+//===========================================================================
 
 
 //===========================================================================
-void NOPx( unsigned int MyCount )
-{
-unsigned int ONCNT = 0;
-unsigned int xxx;
+//	No Operation 
+//===========================================================================
+void NOPx( unsigned int MyCount ){
+    unsigned int ONCNT = 0;
+    unsigned int xxx;
 
-xxx = MyCount;
-
-	while(ONCNT < xxx) {	// NOP for "xxx" Cycles
-		ONCNT++;
-	}
-	ONCNT = 0;			// Reset Counter 
+    xxx = MyCount;
+        while(ONCNT < xxx) {	// NOP for "xxx" Cycles
+            ONCNT++;
+        }
+    ONCNT = 0;			// Reset Counter 
 }
-
+//===========================================================================
 
