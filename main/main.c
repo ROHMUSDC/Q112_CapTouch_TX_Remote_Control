@@ -1,11 +1,11 @@
-//*****************************************************************************
+ //*****************************************************************************
 // Program:	 LAPIS Development Board Demo Code Q112: Cap. Touch
 // Authors:	 USDC Team: C. Schell, K. Bahar, F. Lee, E. Patterson, J. Fontus
 //		 ROHM Semiconductor USA, LLC
 //		 US Design Center
 // Started:  	 July 20, 2014
 // Purpose:	 Demonstration Code for use with Lapis "LAPIS" Development Board and the Cap. Touch demo board
-// Updated:	 August 3, 2014
+// Updated:	 August 13, 2014
 //*****************************************************************************
 
 //*****************************************************************************
@@ -90,7 +90,7 @@
 // I/O PIN DATA ALIASES...
 // Connections for Q112 Universal Socket
 #define RX 		PB0D
-#define INT 		PB1D	//INT
+#define INT_OUT	PB1D	//connected to INT pin on cap touch IC
 #define I2C_SDA 	PB6D
 #define I2C_SCL 	PB5D
 #define GPIO_04	PB2D
@@ -178,6 +178,7 @@ unsigned char 	_flgI2CFin;
 unsigned char	_reqNotHalt;
 
 static unsigned char	BU21072Address = 0x5C;		// address of BU21072 capacitive touch IC
+static unsigned char	LEDDrive_LED_CH = 0xFA;		// address of LED_CH register
 static unsigned char	CNT = 0xFF;				// address of AFE Control
 static unsigned char	INTERRUPT = 0x10;			// address of Interrupt factor
 static unsigned char	CFG_SIN10 = 0xC0;			// address for selecting a setting for gain and threshold for off -> on for sin 1 and 0
@@ -203,22 +204,29 @@ static unsigned char	SIN6_DATA = 0x06;			// address of SIN6 (8 bits long)
 static unsigned char	SIN7_DATA = 0x07;			// address of SIN7 (8 bits long)
 static unsigned char	SIN8_DATA = 0x08;			// address of SIN8 (8 bits long)
 static unsigned char	SIN9_DATA = 0x09;			// address of SIN9 (8 bits long)
-static unsigned char	LEDDrive_LED_CH = 0xFA;		// address of LED_CH register
+static unsigned char	CLR_INTERRUPT= 0xF0;		// address of interrupt clear reg.
+static unsigned char	CLR_DETECT_ON07= 0xF1;		// address of detect on clear register for sw 0 - 7
+static unsigned char	CLR_DETECT_ON89= 0xF2;		// address of detect on clear register for sw 8 - 9
+static unsigned char	CLR_DETECT_OFF07= 0xF4;		// address of detect off clear register for sw 0 - 7
+static unsigned char	CLR_DETECT_OFF89= 0xF5;		// address of detect off clear register for sw 8 - 9
+static unsigned char	CLR_DETECT_CONT07= 0xF4;		// address of detect continuous touch clear register for sw 0 - 7
+static unsigned char	CLR_DETECT_CONT89= 0xF5;		// address of detect continuous touch register for sw 8 - 9
 
-static unsigned char       GA0_value = 0x7;			// value of GA0
-static unsigned char       ON0_value = 0x7F;			// value of ON0
-static unsigned char       OFF_value = 0x7E;			// value of OFF
+static unsigned char       GA0_value = 0x7;			// value of GA0  
+static unsigned char       ON0_value = 0x01;			// value of ON0  
+static unsigned char       OFF_value = 0x00;			// value of OFF  
 static unsigned char       CONT_value = 0x1F;			// value of CONT
+static unsigned char       GA0ON0 = 0x00;
 static unsigned char	LEDDrive_LED_CH_Contents = 0x00;	// assign LED_CH value. 00=all off , FF=all on, 01=pin0 on, 02=pin1 on, 03=pin0&1 on....
 static unsigned char	CNT_CAL= 0x03;			// enable sensor calibration and scan
 static unsigned char	CNT_CFG = 0x04;			// enable configuration
-static unsigned char	CLR_INTERRUPT= 0xF0;		// enable sensor calibration
-static unsigned char	CLR_CAL = 0;				// clear calibration
-static unsigned char	CLR_INI = 0;				// clear initialization
-static unsigned char	KEY3[1];				// place holder for ADC data
+static unsigned char	CLR_CAL = 0x0;				// clear calibration
+static unsigned char	CLR_INI = 0x0;				// clear initialization
+static unsigned char	KEY3[1] = {0};				// place holder for ADC data
 static unsigned char	INTERRUPT_INI[1];			// reg is set to 1 when initialization is finished
 static unsigned char	INTERRUPT_CAL[1];			// reg is set to 1 when software calibration is finished
-static unsigned char 	CHECK[1];
+static unsigned char 	CHECK[1] = {0};
+static unsigned char	CLR = 0x00;				// clear initialization
 //*****************************************************************************
 
 
@@ -240,33 +248,30 @@ int main(void)
     Initialization(); //Ports, UART, Timers, Oscillator, Comparators, etc.
 
     RX_Loop:
+
+
     main_clrWDT();
 
-    if(INT = 1){		// Testing interrupt signal
-        RX_LED = 1;
-        NOPx(60000);
-        NOPx(60000);
-        RX_LED = 0;
-    }
-
-    //----- START I2C RX Command ----- Grab SIN5 ADC data and place in KEY3 variable
+     //----- START I2C RX Command ----- Grab SIN5 ADC data and place in KEY3 variable
     _flgI2CFin = 0;										//reset I2C completed Flag
-    i2c_stop();									           		 //Make sure I2C is not currently running
-    i2c_startReceive(BU21072Address, &SIN5_DATA, 1, &KEY3, 1, (cbfI2c)_funcI2CFin);		 //Wait for I2C commands to finish transfer
+    i2c_stop();									           		 //Make sure I2C is not currently runningi2c_startReceive(BU21072Address, &SIN5_DATA, 1, &KEY3, 1, (cbfI2c)_funcI2CFin);		 //Wait for I2C commands to finish transfer  
+   i2c_startReceive(BU21072Address, &SIN5_DATA, 1, &CHECK, 1, (cbfI2c)_funcI2CFin);
     while(_flgI2CFin != 1){
-        NOP1000();
         main_clrWDT();
     }
     //----- END I2C RX Command -----
+    
+ if(CHECK[1]){
+          RX_LED = 1;
+     } 
+     else{
+          TX_LED = 1; 
+          NOPx(60000);
+	NOPx(60000);
+	NOPx(60000);
 
-    TX_LED = 1;
-    if (KEY3[0] > 0){
-        TX_LED = 1;
-        NOPx(60000);
-        NOPx(60000);
-        NOPx(60000);
-        TX_LED = 0;
-     }
+     } 
+
 
     goto RX_Loop;
 }//end main
@@ -337,8 +342,30 @@ static void Initialization(void) {
     PortC_Low();	//Initialize all 8 Ports of Port C to GPIO-Low
     PortD_Low();	//Initialize all 6 Ports of Port D to GPIO-Low
 
+
+//===========================================================================
+//	Set Port B1 as Digital Input Pin
+//===========================================================================
+    //Direction...
+    PB1DIR= 1;		// PortB Bit1 set to Input Mode...
+
+    //I/O Type...    
+    PB1C1  = 0;		// input with pulldown resistor
+    PB1C0  = 1;
+
+    //Purpose...
+    PA0MD1  = 0;	// set to General Purpose I/O...
+    PA0MD0  = 0;
+
+    //Data
+    PB1D = 1;		// B.1 reads "H" input
+
+    main_clrWDT(); 	// Clear WDT
+//===========================================================================
+
     // Set Oscillator Rate
     SetOSC();
+
 //*****************************************************************************
     // TIMER SETUP
     Setup_Timer_8:
@@ -355,7 +382,7 @@ static void Initialization(void) {
     T89M16 = 0;	// 0=8-Bit Mode; 1=16bit Mode...
     //One-Shot or Normal Mode...
     T8OST = 0;	// 0=Normal; 1=One-Shot...
-    //   CONTROL-1 Register:
+    // CONTROL-1 Register:
     // RUN Mode...
     T8RUN = 0;	//0=STOP; 1=START...
 //*****************************************************************************
@@ -412,6 +439,13 @@ static void Initialization(void) {
     (void)i2c_init(I2C_MOD_FST, (unsigned short)HSCLK_KHZ, I2C_SYN_OFF);
 //*****************************************************************************
 
+//----- Activate Sensor Calibration------Clear interrupt register
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_INTERRUPT, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
   
 //*****************************************************************************
 //----- Setting of Sensor Configuration------Set value of Gain 0
@@ -445,19 +479,22 @@ static void Initialization(void) {
 //*****************************************************************************  
 
 
-//*****************************************************************************
-//----- Activate Sensor Configuration------
+//*****************************************************************************  
+//----- Setting of Sensor Configuration------Selecting a setting for gain and threshold off->on
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CFG_SIN10, 1, &GA0ON0, 1, (cbfI2c)_funcI2CFin);			//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Activate Sensor Configuration------Enable configuration value
     _flgI2CFin = 0;										//reset I2C completed flag
     i2c_stop();											//Make sure I2C is not currently running
     i2c_startSend( BU21072Address, &CNT, 1, &CNT_CFG , 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
     while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
        main_clrWDT();
     }
-//*****************************************************************************  
-
-
-//*****************************************************************************
-//----- Activate Sensor Calibration------
+//----- Activate Sensor Calibration------Enable scan and scan software calibration
     _flgI2CFin = 0;										//reset I2C completed flag
     i2c_stop();											//Make sure I2C is not currently running
     i2c_startSend( BU21072Address, &CNT, 1, &CNT_CAL, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
@@ -466,9 +503,58 @@ static void Initialization(void) {
     }
 //*****************************************************************************  
     
+//----- Activate Sensor Calibration------Clear interrupt register
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_INTERRUPT, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
 
-    NOPx(1000);
-
+/*
+//----- Activate Sensor Calibration------Clear detect on clear register for sw 0 - 7
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_DETECT_ON07, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Activate Sensor Calibration------Clear detect on clear register for sw 8 - 9
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_DETECT_ON89, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Activate Sensor Calibration------Clear  detect off clear register for sw 0 - 7
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_DETECT_OFF07, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Activate Sensor Calibration------Clear  detect off clear register for sw 8 - 9
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_DETECT_OFF89, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Activate Sensor Calibration------Clear  detect continuous touch clear register for sw 0 - 7
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_DETECT_CONT07, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+//----- Activate Sensor Calibration------Clear  detect continuous touch clear register for sw 8 - 9
+    _flgI2CFin = 0;										//reset I2C completed flag
+    i2c_stop();											//Make sure I2C is not currently running
+    i2c_startSend( BU21072Address, &CLR_DETECT_CONT89, 1, &CLR, 1, (cbfI2c)_funcI2CFin);		//Begin I2C Receive Command
+    while(_flgI2CFin != 1) {									//Wait for I2C commands to finish transfer
+       main_clrWDT();
+    }
+*/
 
 //*****************************************************************************
     //----- LED drivers control I2C Init TX Command ----- //Command for setting up LED driver
@@ -481,7 +567,7 @@ static void Initialization(void) {
 //*****************************************************************************
 
 
-    IRLED_PWM();  //set IRLED PWM
+  //  IRLED_PWM();  //set IRLED PWM
 
 
 }//End Initialization
